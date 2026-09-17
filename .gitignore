@@ -1,0 +1,6 @@
+*.pgn
+*.pgn.zst
+*.parquet
+__pycache__/
+*.pyc
+.venv/
