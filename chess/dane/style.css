@@ -1,0 +1,86 @@
+
+#board-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px auto;
+}
+
+#rank-labels {
+    display: flex;
+    flex-direction: column;
+    width: 24px;
+    margin-right: 4px;
+}
+
+#rank-labels div {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#board-area {
+    display: flex;
+    flex-direction: column;
+}
+
+#board {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    width: 480px;
+    height: 480px;
+}
+
+.square {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 44px;
+
+    user-select: none;
+}
+
+.light {
+    background-color: #f0d9b5;
+}
+
+.dark {
+    background-color: #779556;
+}
+
+#file-labels {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    height: 24px;
+}
+
+#file-labels div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#rank-labels,
+#file-labels {
+    font-size: 14px;
+    font-weight: bold;
+    color: #777;
+}
+
+#flip-board {
+    padding: 8px 16px;
+    margin: 10px 0;
+    cursor: pointer;
+}
+.square {
+    cursor: pointer;
+}
+
+.square.selected {
+    background-color: #f6f669;
+}

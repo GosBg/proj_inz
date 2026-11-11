@@ -19,7 +19,8 @@ def stream_pgn(path):
                 game = chess.pgn.read_game(text_stream)
                 if game is None:
                     break
-                yield game
+                else:
+                    yield game
 
 def passes_filter(game):
     headers = game.headers
@@ -43,7 +44,7 @@ def passes_filter(game):
         return False
     if headers.get("Result", "") not in ("1-0", "0-1", "1/2-1/2"):
         return False
-
+    #jesli nic nie odrzucilo wczesniej to przechodzi
     return True
 
 def main():

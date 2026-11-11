@@ -1,0 +1,255 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="dane/style.css">
+    <title>GRAJ</title>
+</head>
+<body>
+    <h1>GRAJ</h1>
+    <p>ZAGRAJ PONOWNIE</p>
+
+    <button id="flip-board">Obróć szachownice</button>
+    <button id="play-white">Zagraj jako białe</button>
+    <button id="play-black">Zagraj jako czarne</button>
+
+    <div id="board-container">
+        <div id="rank-labels"></div>
+        <div id="board-area">
+            <div id="board"></div>
+            <div id="file-labels"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm";
+
+        const chess = new Chess();
+
+        const boardElement = document.getElementById("board");
+        const rankLabels = document.getElementById("rank-labels");
+        const fileLabels = document.getElementById("file-labels");
+        const flipButton = document.getElementById("flip-board");
+
+        const playWhiteButton = document.getElementById("play-white");
+        const playBlackButton = document.getElementById("play-black");
+
+        let isFlipped = false;
+        let selectedSquare = null;
+
+        let playerColor = "w";
+        let thinking = false;
+        const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+        const pieceSymbols = {
+            w: {
+                k: "♔",
+                q: "♕",
+                r: "♖",
+                b: "♗",
+                n: "♘",
+                p: "♙"
+            },
+            b: {
+                k: "♚",
+                q: "♛",
+                r: "♜",
+                b: "♝",
+                n: "♞",
+                p: "♟"
+            }
+        };
+
+        function drawCoordinates() {
+            rankLabels.innerHTML = "";
+            fileLabels.innerHTML = "";
+
+            for (let row = 0; row < 8; row++) {
+                const rankLabel = document.createElement("div");
+
+                if (isFlipped === false) {
+                    rankLabel.textContent = 8 - row;
+                } else {
+                    rankLabel.textContent = row + 1;
+                }
+
+                rankLabels.appendChild(rankLabel);
+            }
+
+            for (let col = 0; col < 8; col++) {
+                const fileLabel = document.createElement("div");
+
+                if (isFlipped === false) {
+                    fileLabel.textContent = files[col];
+                } else {
+                    fileLabel.textContent = files[7 - col];
+                }
+
+                fileLabels.appendChild(fileLabel);
+            }
+        }
+
+        function handleSquareClick(squareName){
+            if(thinking){
+                return;
+            }
+
+            if(chess.turn() !== playerColor){
+                return;
+            }
+            const piece = chess.get(squareName);
+
+            if(selectedSquare === squareName){
+                selectedSquare = null;
+                drawBoard();
+                return;
+            }
+
+            if(piece !== undefined && piece.color === chess.turn()){
+                selectedSquare = squareName;
+                drawBoard();
+                return;
+            }
+
+            if (selectedSquare === null) {
+                return;
+            }
+
+            try {
+                chess.move({
+                    from: selectedSquare,
+                    to: squareName,
+                    promotion: "q"
+                });
+
+                selectedSquare = null;
+                if(!chess.isGameOver()){
+                    maia();
+                }
+            } catch (error) {
+                console.log("Illegal move:", error.message);
+            }
+
+            drawBoard();
+        }
+
+        function drawBoard() {
+            boardElement.innerHTML = "";
+
+            const position = chess.board();
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement("div");
+
+                    square.classList.add("square");
+
+                    if ((row + col) % 2 === 0) {
+                        square.classList.add("light");
+                    } else {
+                        square.classList.add("dark");
+                    }
+
+                    let boardRow = row;
+                    let boardCol = col;
+
+                    if (isFlipped === true) {
+                        boardRow = 7 - row;
+                        boardCol = 7 - col;
+                    }
+
+                    const piece = position[boardRow][boardCol];
+
+                    const squareName = files[boardCol] + (8 - boardRow);
+
+                    square.addEventListener("click", function () {
+                        handleSquareClick(squareName);
+                    });
+
+                    if (selectedSquare === squareName) {
+                        square.classList.add("selected");
+                    }
+
+                    if (piece !== null) {
+                        square.textContent =
+                            pieceSymbols[piece.color][piece.type];
+                    }
+
+                    boardElement.appendChild(square);
+                }
+            }
+
+            drawCoordinates();
+        }
+
+        async function maia() {
+            thinking = true;
+            const res = await fetch("/api/maia", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({fen:chess.fen()})
+            });
+            const data = await res.json();
+            await sleep(500);
+            const m =data.move;
+            var promotion = undefined;
+            if(m.length>4){
+                promotion = m[4];
+            }
+            chess.move({
+                from: m.slice(0,2),
+                to: m.slice(2,4),
+                promotion: promotion
+            });
+            thinking = false;
+            drawBoard();
+        }
+        
+        function startNewGame(color){
+            chess.reset();
+            selectedSquare = null;
+            playerColor = color;
+
+            if(color === "w"){
+                isFlipped = false;
+            }else{
+                isFlipped = true;
+            }
+            drawBoard();
+
+            if(playerColor === "b"){
+                maia();
+            }
+        }
+        
+        //funkcja sleep bo async w JS nie ma wbudowanej funkcji sleep 
+        function sleep(ms) {
+            return new Promise(function (resolve) {
+                setTimeout(resolve, ms);
+            });
+        }
+
+        playWhiteButton.addEventListener("click", function () {
+            startNewGame("w");
+        });
+
+        playBlackButton.addEventListener("click", function () {
+            startNewGame("b");
+        });
+
+        flipButton.addEventListener("click", function () {
+            if (isFlipped === false) {
+                isFlipped = true;
+            } else {
+                isFlipped = false;
+            }
+
+            drawBoard();
+        });
+
+        drawBoard();
+    </script>
+</body>
+</html>
