@@ -17,6 +17,9 @@ wartosci_bierek = {
     chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 100,
 }
 
+def na_none(x):
+    return None if pd.isna(x) else int(x)
+
 def wczytaj_cache():
     if os.path.exists(plik_cache):
         df = pd.read_parquet(plik_cache)
@@ -118,11 +121,6 @@ def wykryj_widly(board, ruch, tylko_bezpieczne=False):
         return kolor
     return None
 
-kolor_forkujacego = wykryj_widly(board, ruch)
-if kolor_forkujacego is not None:
-   zagral_fork = kolor_forkujacego        
-   dostal_fork = not kolor_forkujacego 
-
 def widly_dostepne(board):
     """Lista ruchów, które są forkiem dla strony na ruchu."""
     return [r for r in board.legal_moves
@@ -134,7 +132,6 @@ def przegapil_widly(board, zagrany_ruch):
         return False
     return zagrany_ruch not in dostepne
 
-#---------reszta test
 
 #----------podwójny szach----------
 def wykryj_podwojny_szach(board, ruch):
@@ -352,12 +349,51 @@ def wynik_zamkniecia(board):
 
 def czy_zamknieta(board, prog=0.6):
     return wynik_zamkniecia(board) >= prog
-#----TESTY TUTAJ----
-board = chess.Board("r3k3/8/8/3N4/8/8/8/4K3 w - - 0 1")
-print(przegapil_widly(board, chess.Move.from_uci("e1e2")))  
-print(przegapil_widly(board, chess.Move.from_uci("d5c7")))  
 
-testy = [
+# ---------- ostrość / spokój pozycji ----------
+limit_luki_cp = 300      # obcięcie różnicy ocen (mat i tak jest ucięty)
+limit_zlozonosci = 40    # skala do normalizacji złożoności
+
+def ostrosc_waskosc(oceny):
+    """
+    oceny: krotka (eval1, eval2, eval3) z cache, z perspektywy strony na ruchu.
+    Zwraca 0.0-1.0: 0 = wiele równych ruchów, 1 = jeden dobry ruch, reszta traci.
+    """
+    e1, e2, e3 = oceny
+    if e1 is None or e2 is None:
+        return 1.0   # tylko jeden legalny ruch = "jedyny ruch"
+    luka = min(max(e1 - e2, 0), limit_luki_cp)
+    return round(luka / limit_luki_cp, 3)
+
+def ostrosc_zlozonosc(board):
+    """
+    0.0-1.0: ile jest do sprawdzenia. Liczy bicia, szachy i atakowane figury
+    strony na ruchu plus liczbę legalnych ruchów. Nie wymaga Stockfisha.
+    """
+    kolor = board.turn
+    bicia = sum(1 for r in board.legal_moves if board.is_capture(r))
+    szachy = sum(1 for r in board.legal_moves if board.gives_check(r))
+    atakowane = 0
+    for pole, bierka in board.piece_map().items():
+        if bierka.color != kolor and bierka.piece_type != chess.KING:
+            if board.is_attacked_by(kolor, pole):
+                atakowane += 1
+    ruchy = board.legal_moves.count()
+    surowa = bicia + 2 * szachy + atakowane + ruchy / 4
+    return round(min(surowa / limit_zlozonosci, 1.0), 3)
+
+def ostrosc(board, cache):
+    """Zwraca (waskosc, zlozonosc). Dwie osobne cechy, bo mogą się różnić."""
+    oceny = cache.get(klucz_cache(board))
+    waskosc = ostrosc_waskosc(oceny) if oceny is not None else None
+    return waskosc, ostrosc_zlozonosc(board)
+#----TESTY TUTAJ----
+def testy():
+    board = chess.Board("r3k3/8/8/3N4/8/8/8/4K3 w - - 0 1")
+    print(przegapil_widly(board, chess.Move.from_uci("e1e2")))  
+    print(przegapil_widly(board, chess.Move.from_uci("d5c7")))  
+
+    testy = [
     ("4k3/8/8/8/4N3/8/8/4R1K1 w - - 0 1", "e4f6", wykryj_podwojny_szach, chess.WHITE),
     ("4k3/8/8/8/4N3/8/8/4R1K1 w - - 0 1", "e4c3", wykryj_atak_z_okrycia, chess.WHITE),
     ("4k3/8/8/8/4N3/8/8/4R1K1 w - - 0 1", "e1e2", wykryj_atak_z_okrycia, None),
@@ -365,11 +401,34 @@ testy = [
     ("r5k1/8/8/q7/8/8/4K3/7R w - - 0 1", "h1a1", wykryj_szpikulec, chess.WHITE),
     ("4k3/8/8/3n4/8/8/3R4/4K3 w - - 0 1", "d2d5", zbil_wiszaca, chess.WHITE),
     ("6k1/4b3/2n5/1B6/8/8/8/4R1K1 w - - 0 1", "b5c6", zbil_obroncy, chess.WHITE),
-]
-for fen, uci, f, oczekiwane in testy:
-    wynik = f(chess.Board(fen), chess.Move.from_uci(uci))
-    print(f.__name__, uci, wynik, "OK" if wynik == oczekiwane else "BŁĄD")
+    ]
+    for fen, uci, f, oczekiwane in testy:
+        wynik = f(chess.Board(fen), chess.Move.from_uci(uci))
+        print(f.__name__, uci, wynik, "OK" if wynik == oczekiwane else "BŁĄD")
+
+
+
+    print(faza_gry(chess.Board()))   # otwarcie
+
+    sr = chess.Board("r2q1rk1/pp2bppp/2n1pn2/2pp4/3P1B2/2PBPN2/PP1N1PPP/R2Q1RK1 w - - 0 15")
+    print(faza_gry(sr))              # gra_srodkowa
+
+    kon = chess.Board("8/5pk1/8/8/8/8/5PK1/3R4 w - - 0 40")
+    print(faza_gry(kon))             # koncowka
+
+    print(wynik_zamkniecia(chess.Board()))   # 0.5, brak blokad i otwartych linii
+    zam = chess.Board("rnbqkbnr/pp3ppp/4p3/2ppP3/3P4/8/PPP2PPP/RNBQKBNR w KQkq - 0 5")
+    print(wynik_zamkniecia(zam), czy_zamknieta(zam))
+
+    print(ostrosc_waskosc((50, 40, 30)))      # niska, wiele równych ruchów
+    print(ostrosc_waskosc((50, -250, -300)))  # 1.0, jeden dobry ruch
+    print(ostrosc_waskosc((50, None, None)))  # 1.0, jedyny ruch
+    print(ostrosc_zlozonosc(chess.Board()))   # niska
+    tn = chess.Board("r1bq1rk1/ppp2ppp/2n2n2/3pp3/1b1P4/2NBPN2/PPP2PPP/R1BQ1RK1 w - - 0 8")
+    print(ostrosc_zlozonosc(tn))              # wyższa niż start
+
 def main():
+    test = testy()
     cache = wczytaj_cache()
     engine = chess.engine.SimpleEngine.popen_uci(stockfish_scieszka)
     engine.configure({"Threads": 4, "Hash": 512})
